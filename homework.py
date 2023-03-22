@@ -10,27 +10,31 @@ import requests
 
 
 class ApiError(Exception):
-    """Ошибка API"""
+    """Ошибка API."""
+
     ...
 
 
 class ApiCodeError(Exception):
-    """Ошибка API status code"""
+    """Ошибка API status code."""
+
     ...
 
 
 class ConvertError(Exception):
-    """Ошибка конвертации ответа API"""
+    """Ошибка конвертации ответа API."""
+
     def __init__(self, text):
-        """Текст ошибки конвертации ответа API"""
+        """Текст ошибки конвертации ответа API."""
         self.txt = f'Ответ API не конвертируется в json. {text}'
     ...
 
 
 class MsgNotSendError(Exception):
-    """Ошибка отправки сообщения telegram"""
+    """Ошибка отправки сообщения telegram."""
+
     def __init__(self, text):
-        """Текст ошибки отправки сообщения telegram"""
+        """Текст ошибки отправки сообщения telegram."""
         self.txt = f'Сообщение не отправлено. {text}'
     ...
 
