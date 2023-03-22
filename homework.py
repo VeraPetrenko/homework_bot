@@ -1,5 +1,6 @@
 import os
 import logging
+import sys
 import time
 from http import HTTPStatus
 
@@ -8,11 +9,24 @@ import telegram
 import requests
 
 
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO,
-    filemode='w'
-)
+class ApiError(Exception):
+    ...
+
+
+class ApiCodeError(Exception):
+    ...
+
+
+class ConvertError(Exception):
+    def __init__(self, text):
+        self.txt = f'Ответ API не конвертируется в json. {text}'
+    ...
+
+
+class MsgNotSendError(Exception):
+    def __init__(self, text):
+        self.txt = f'Сообщение не отправлено. {text}'
+    ...
 
 
 load_dotenv()
@@ -41,19 +55,22 @@ def check_tokens():
         'TELEGRAM_TOKEN': TELEGRAM_TOKEN,
         'TELEGRAM_CHAT_ID': TELEGRAM_CHAT_ID
     }
-    for token in tokens.values():
-        if token is None or '':
-            logging.critical('Отсутствуют обязательные переменные окружения')
-            exit()
+    for token_key, token_value in tokens.items():
+        if not token_value:
+            err = f'Отсутствует обязательная переменная окружения {token_key}'
+            logging.critical(err)
+            sys.exit(err)
 
 
 def send_message(bot, message):
     """Отправка сообщения о статусе ботом."""
     try:
         bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
-        logging.debug('Сообщение отправлено')
-    except Exception:
+    except telegram.error.TelegramError:
         logging.error('Сообщение не отправлено')
+        raise MsgNotSendError()
+    else:
+        logging.debug('Сообщение отправлено')
 
 
 def get_api_answer(timestamp):
@@ -69,13 +86,22 @@ def get_api_answer(timestamp):
             logging.error(
                 f'API домашки возвращает код {api_answer_status_code}'
             )
-            raise Exception(
+            raise ApiCodeError(
                 f'API домашки возвращает код {api_answer_status_code}'
             )
-        return api_answer.json()
     except requests.RequestException:
-        logging.error('Не удалось получить ответ')
-        raise Exception('Не удалось получить ответ')
+        logging.error(f'Не удалось получить ответ'
+                      f'endpoint={ENDPOINT}'
+                      f'headers={HEADERS}'
+                      f'params from_date={timestamp}'
+                      )
+        raise ApiError('Не удалось получить ответ')
+    else:
+        try:
+            return api_answer.json()
+        except TypeError():
+            logging.error('Ответ API не конвертируется в json')
+            raise ConvertError()
 
 
 def check_response(response):
@@ -92,7 +118,7 @@ def check_response(response):
     if not isinstance(response['homeworks'], list):
         logging.error('В response[homeworks] получен не список')
         raise TypeError('В response[homeworks] получен не список')
-    if len(response['homeworks']) == 0:
+    if response['homeworks']:
         logging.debug('Обновлений нет')
     return response.get('homeworks')
 
@@ -135,7 +161,7 @@ def main():
         try:
             timestamp_now = int(time.time())
             response_now = check_response(get_api_answer(timestamp))
-            if len(response_now) > 0:
+            if response_now:
                 status_now = parse_status(response_now[0])
                 if status_now != status_old:
                     send_message(bot, status_now)
@@ -150,4 +176,12 @@ def main():
 
 
 if __name__ == '__main__':
+    logging.basicConfig(
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        level=logging.INFO,
+        handlers=[
+            logging.FileHandler(filename='logs.log', mode='w'),
+            logging.StreamHandler(stream=sys.stdout)
+        ]
+    )
     main()
