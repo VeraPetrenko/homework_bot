@@ -12,13 +12,9 @@ import requests
 class ApiError(Exception):
     """Ошибка API."""
 
-    ...
-
 
 class ApiCodeError(Exception):
     """Ошибка API status code."""
-
-    ...
 
 
 class ConvertError(Exception):
@@ -27,7 +23,6 @@ class ConvertError(Exception):
     def __init__(self, text):
         """Текст ошибки конвертации ответа API."""
         self.txt = f'Ответ API не конвертируется в json. {text}'
-    ...
 
 
 class MsgNotSendError(Exception):
@@ -36,12 +31,19 @@ class MsgNotSendError(Exception):
     def __init__(self, text):
         """Текст ошибки отправки сообщения telegram."""
         self.txt = f'Сообщение не отправлено. {text}'
-    ...
 
 
 load_dotenv()
 
-
+LOGSDIR = f'{os.path.dirname(os.path.realpath(__file__))}/logs.log',
+TOKENERRMSG = 'Отсутствует обязательная переменная окружения'
+APIERRMSG = 'API домашки возвращает код'
+CONVERTERR = 'Ответ API не конвертируется в json'
+RESPONSENOTDICTERR = 'В респонсе получен не словарь'
+RESPONSENOCURRDTERR = 'В респонсе нет нужного ключа - current_date'
+RESPONSENOHMWRKTERR = 'В респонсе нет нужного ключа - homeworks'
+HMWRKSTATERR = 'API домашки вернул недокументированный статус/без статуса'
+NOTLISTINRESPONSERR = 'В response[homeworks] получен не список'
 PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
@@ -67,9 +69,8 @@ def check_tokens():
     }
     for token_key, token_value in tokens.items():
         if not token_value:
-            err = f'Отсутствует обязательная переменная окружения {token_key}'
-            logging.critical(err)
-            sys.exit(err)
+            logging.critical(TOKENERRMSG + f' {token_key}')
+            sys.exit(TOKENERRMSG)
 
 
 def send_message(bot, message):
@@ -94,10 +95,10 @@ def get_api_answer(timestamp):
         api_answer_status_code = api_answer.status_code
         if api_answer_status_code != HTTPStatus.OK:
             logging.error(
-                f'API домашки возвращает код {api_answer_status_code}'
+                APIERRMSG + f' {api_answer_status_code}'
             )
             raise ApiCodeError(
-                f'API домашки возвращает код {api_answer_status_code}'
+                APIERRMSG + f' {api_answer_status_code}'
             )
     except requests.RequestException:
         logging.error(f'Не удалось получить ответ'
@@ -110,24 +111,24 @@ def get_api_answer(timestamp):
         try:
             return api_answer.json()
         except TypeError():
-            logging.error('Ответ API не конвертируется в json')
+            logging.error(CONVERTERR)
             raise ConvertError()
 
 
 def check_response(response):
     """Проверка response."""
     if not isinstance(response, dict):
-        logging.error('В респонсе получен не словарь')
-        raise TypeError('В респонсе получен не словарь')
+        logging.error(RESPONSENOTDICTERR)
+        raise TypeError(RESPONSENOTDICTERR)
     if 'current_date'not in response.keys():
-        logging.error('В респонсе нет нужного ключа - current_date')
-        raise KeyError('В респонсе нет нужного ключа - current_date')
+        logging.error(RESPONSENOCURRDTERR)
+        raise KeyError(RESPONSENOCURRDTERR)
     if 'homeworks'not in response.keys():
-        logging.error('В респонсе нет нужного ключа - homeworks')
-        raise KeyError('В респонсе нет нужного ключа - homeworks')
+        logging.error(RESPONSENOHMWRKTERR)
+        raise KeyError(RESPONSENOHMWRKTERR)
     if not isinstance(response['homeworks'], list):
-        logging.error('В response[homeworks] получен не список')
-        raise TypeError('В response[homeworks] получен не список')
+        logging.error(NOTLISTINRESPONSERR)
+        raise TypeError(NOTLISTINRESPONSERR)
     if response['homeworks']:
         logging.debug('Обновлений нет')
     return response.get('homeworks')
@@ -150,10 +151,10 @@ def parse_status(homework):
     homework_status = homework.get('status')
     if homework_status not in HOMEWORK_VERDICTS.keys():
         logging.error(
-            'API домашки вернул недокументированный статус/без статуса'
+            HMWRKSTATERR
         )
         raise KeyError(
-            'API домашки вернул недокументированный статус/без статуса'
+            HMWRKSTATERR
         )
     verdict = HOMEWORK_VERDICTS[homework_status]
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
@@ -190,7 +191,10 @@ if __name__ == '__main__':
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         level=logging.INFO,
         handlers=[
-            logging.FileHandler(filename='logs.log', mode='w'),
+            logging.FileHandler(
+                filename=LOGSDIR,
+                mode='w'
+            ),
             logging.StreamHandler(stream=sys.stdout)
         ]
     )
